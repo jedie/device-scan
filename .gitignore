@@ -1,0 +1,12 @@
+__pycache__
+
+.*
+!.editorconfig
+!.flake8
+!.gitignore
+!.isort.cfg
+
+dist
+
+publish.log
+poetry.lock
