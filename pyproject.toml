@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "device-scan"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Python lib for find devices in own network subnet"
 readme="README.md"
 
@@ -10,7 +10,7 @@ homepage = "https://github.com/jedie/device-scan/"
 keywords=["creole", "markup", "creole2html", "html2creole", "rest2html", "html2rest", "html2textile"]
 classifiers = [
     # http://pypi.python.org/pypi?%3Aaction=list_classifiers
-    "Development Status :: 1 - Planning",
+    "Development Status :: 3 - Alpha",
     "Environment :: Web Environment",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: GNU General Public License (GPL)",
