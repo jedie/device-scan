@@ -1,90 +1,80 @@
-'''
+"""
     Device-Scanner
     ~~~~~~~~~~~~~~
-'''
+"""
 import asyncio
 import socket
 
 
-SOCKET_TIMEOUT = 10
-
-DNS_SERVER = '8.8.8.8'  # Google DNS Server ot get own IP
-
-
-def get_ip_address():
-    '''
-    :return: IP address of the host running this script.
-    '''
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.settimeout(SOCKET_TIMEOUT)
-    s.connect((DNS_SERVER, 80))
-    ip = s.getsockname()[0]
-    s.close()
-    return ip
-
-
-def ip_range_iterator(own_ip, exclude_own):
-    ip_prefix, own_no = own_ip.rsplit('.', 1)
-    print(f'Scan:.....: {ip_prefix}.X')
-
-    own_no = int(own_no)
-
-    for no in range(1, 255):
-        if exclude_own and no == own_no:
-            continue
-
-        yield f'{ip_prefix}.{no}'
-
-
 class Scanner:
-    def __init__(self, open_connection, timeout=2, return_exceptions=True):
-        self.open_connection = open_connection
+    def __init__(self,
+                 ips,  # IPs to scan
+                 async_callback,  # the asyncio wait for callback to test the host
+                 async_callback_kwargs=None,  # additional keyword arguments for callback
+                 timeout=2,  # asyncio.wait_for() timeout
+                 return_exceptions=True  # asyncio.gather() return_exceptions
+                 ):
+        self.ips = tuple(ips)
+        self.async_callback = async_callback
+
+        if async_callback_kwargs is None:
+            self.async_callback_kwargs = {}
+        else:
+            self.async_callback_kwargs = async_callback_kwargs
+
         self.timeout = timeout
         self.return_exceptions = return_exceptions
 
-        self.own_ip = get_ip_address()
-        print(f'Own IP....: {self.own_ip}')
-
-    async def port_scan_and_serve(self, port):
-        ips = tuple(ip_range_iterator(self.own_ip, exclude_own=True))
-
+    async def _scan(self):
         connections = [
             asyncio.wait_for(
-                self.open_connection(host=ip, port=port),
+                self.async_callback(ip=ip, **self.async_callback_kwargs),
                 timeout=self.timeout
             )
-            for ip in ips
+            for ip in self.ips
         ]
         results = await asyncio.gather(*connections, return_exceptions=self.return_exceptions)
-        return zip(ips, results)
+        return zip(self.ips, results)
 
-    def scan(self, port):
+    def scan(self):
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(
-            self.port_scan_and_serve(port=port)
+            self._scan()
         )
 
 
-if __name__ == '__main__':
-    async def open_connection(*, host, port):
-        try:
-            reader, writer = await asyncio.open_connection(host=host, port=port)
-        except ConnectionError:
-            return
+def get_domain_names(ips):
+    async def async_callback(*, ip):
+        domain_name = socket.getfqdn(ip)
+        if domain_name != ip:
+            return domain_name
 
-        # print('Connected to:', host, port, end='...', flush=True)
-        writer.write(b'GET / HTTP/1.0\n\n')
-        await writer.drain()
-        content = await reader.read(50)
-        content = content.decode('UTF-8', errors='replace')
-        print(f'{host}:{port} get: {content!r}...')
-        return content
-
-    scanner = Scanner(open_connection=open_connection)
-    results = scanner.scan(port=80)
+    scanner = Scanner(ips=ips, async_callback=async_callback)
+    results = scanner.scan()
 
     for ip, result in results:
         if isinstance(result, asyncio.TimeoutError):
             continue
 
-        print(f'{ip} - {result!r}...')
+        if result is not None:
+            yield ip, result
+
+
+def connect_scan(ips, port=80):
+    """
+    Try to open a connection to ip:port
+    yields ip and reader/writer streams
+    """
+    async def async_callback(*, ip, port):
+        reader, writer = await asyncio.open_connection(host=ip, port=port)
+        return True
+
+    scanner = Scanner(ips=ips, async_callback=async_callback, async_callback_kwargs={'port': port})
+    results = scanner.scan()
+
+    for ip, ok in results:
+        if isinstance(ok, asyncio.TimeoutError):
+            continue
+
+        if ok is True:
+            yield ip

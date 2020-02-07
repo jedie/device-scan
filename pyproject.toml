@@ -41,6 +41,7 @@ flynt = "^0.40.1"
 autopep8 = "^1.4.4"
 
 [tool.poetry.scripts]
+device_scan = "device_scan.cli:main"
 publish = "device_scan.publish:publish"
 
 [build-system]
